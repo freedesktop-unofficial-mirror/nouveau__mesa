@@ -733,6 +733,7 @@ driCreateConfigs(GLenum fb_format, GLenum fb_type,
 		    	__DRI_ATTRIB_TEXTURE_2D_BIT |
 		    	__DRI_ATTRIB_TEXTURE_RECTANGLE_BIT :
 		    	0;
+		}
 	    }
 	}
     }
