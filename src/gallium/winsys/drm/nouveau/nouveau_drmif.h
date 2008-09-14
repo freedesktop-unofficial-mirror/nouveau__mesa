@@ -34,6 +34,7 @@
 #include "nouveau/nouveau_bo.h"
 #include "nouveau/nouveau_resource.h"
 #include "nouveau/nouveau_pushbuf.h"
+#include "nouveau_local.h"
 
 struct nouveau_device_priv {
 	struct nouveau_device base;
@@ -42,10 +43,6 @@ struct nouveau_device_priv {
 	drm_context_t ctx;
 	drmLock *lock;
 	int needs_close;
-
-	struct drm_nouveau_mem_alloc sa;
-	void *sa_map;
-	struct nouveau_resource *sa_heap;
 };
 #define nouveau_device(n) ((struct nouveau_device_priv *)(n))
 
@@ -106,36 +103,17 @@ nouveau_fence_wait(struct nouveau_fence **);
 extern void
 nouveau_fence_flush(struct nouveau_channel *);
 
-struct nouveau_pushbuf_reloc {
-	struct nouveau_pushbuf_bo *pbbo;
-	uint32_t *ptr;
-	uint32_t flags;
-	uint32_t data;
-	uint32_t vor;
-	uint32_t tor;
-};
-
-struct nouveau_pushbuf_bo {
-	struct nouveau_channel *channel;
-	struct nouveau_bo *bo;
-	unsigned flags;
-	unsigned handled;
-};
-
 #define NOUVEAU_PUSHBUF_MAX_BUFFERS 1024
 #define NOUVEAU_PUSHBUF_MAX_RELOCS 1024
 struct nouveau_pushbuf_priv {
 	struct nouveau_pushbuf base;
 
-	struct nouveau_fence *fence;
+	unsigned *pushbuf;
+	unsigned  size;
 
-	unsigned nop_jump;
-	unsigned start;
-	unsigned size;
-
-	struct nouveau_pushbuf_bo *buffers;
+	struct drm_nouveau_gem_pushbuf_bo *buffers;
 	unsigned nr_buffers;
-	struct nouveau_pushbuf_reloc *relocs;
+	struct drm_nouveau_gem_pushbuf_reloc *relocs;
 	unsigned nr_relocs;
 };
 #define nouveau_pushbuf(n) ((struct nouveau_pushbuf_priv *)(n))
@@ -158,36 +136,19 @@ nouveau_pushbuf_emit_reloc(struct nouveau_channel *, void *ptr,
 			   struct nouveau_bo *, uint32_t data, uint32_t flags,
 			   uint32_t vor, uint32_t tor);
 
-struct nouveau_dma_priv {
-	uint32_t base;
-	uint32_t max;
-	uint32_t cur;
-	uint32_t put;
-	uint32_t free;
-
-	int push_free;
-} dma;
-
 struct nouveau_channel_priv {
 	struct nouveau_channel base;
 
 	struct drm_nouveau_channel_alloc drm;
 
-	uint32_t *pushbuf;
 	void     *notifier_block;
-
-	volatile uint32_t *user;
-	volatile uint32_t *put;
-	volatile uint32_t *get;
-	volatile uint32_t *ref_cnt;
-
-	struct nouveau_dma_priv dma_master;
-	struct nouveau_dma_priv dma_bufmgr;
-	struct nouveau_dma_priv *dma;
 
 	struct nouveau_fence *fence_head;
 	struct nouveau_fence *fence_tail;
 	uint32_t fence_sequence;
+	/* NV04 hackery */
+	struct nouveau_grobj *fence_grobj;
+	struct nouveau_notifier *fence_ntfy;
 
 	struct nouveau_pushbuf_priv pb;
 
@@ -244,22 +205,32 @@ nouveau_notifier_wait_status(struct nouveau_notifier *, int id, int status,
 
 struct nouveau_bo_priv {
 	struct nouveau_bo base;
+	int refcount;
 
-	struct nouveau_pushbuf_bo *pending;
+	/* Buffer configuration + usage hints */
+	unsigned flags;
+	unsigned size;
+	unsigned align;
+	int user;
+
+	/* Tracking */
+	struct drm_nouveau_gem_pushbuf_bo *pending;
+	struct nouveau_channel *pending_channel;
 	struct nouveau_fence *fence;
 	struct nouveau_fence *wr_fence;
 
-	struct drm_nouveau_mem_alloc drm;
+	/* Userspace object */
+	void *sysmem;
+
+	/* Kernel object */
+	uint32_t global_handle;
+	unsigned handle;
 	void *map;
 
-	void *sysmem;
-	int user;
-
-	int refcount;
-
+	/* Last known information from kernel on buffer status */
+	int pinned;
 	uint64_t offset;
-	uint64_t flags;
-	int tiled;
+	uint32_t domain;
 };
 #define nouveau_bo(n) ((struct nouveau_bo_priv *)(n))
 
@@ -278,10 +249,11 @@ nouveau_bo_user(struct nouveau_device *, void *ptr, int size,
 		struct nouveau_bo **);
 
 extern int
-nouveau_bo_ref(struct nouveau_device *, uint64_t handle, struct nouveau_bo **);
+nouveau_bo_ref_handle(struct nouveau_device *, uint32_t handle,
+		      struct nouveau_bo **);
 
 extern int
-nouveau_bo_set_status(struct nouveau_bo *, uint32_t flags);
+nouveau_bo_ref(struct nouveau_device *, uint64_t handle, struct nouveau_bo **);
 
 extern void
 nouveau_bo_del(struct nouveau_bo **);
@@ -293,8 +265,13 @@ extern void
 nouveau_bo_unmap(struct nouveau_bo *);
 
 extern int
-nouveau_bo_validate(struct nouveau_channel *, struct nouveau_bo *,
-		    uint32_t flags);
+nouveau_bo_pin(struct nouveau_bo *, uint32_t flags);
+
+extern void
+nouveau_bo_unpin(struct nouveau_bo *);
+
+extern uint64_t
+nouveau_bo_get_drm_map(struct nouveau_bo *);
 
 extern int
 nouveau_resource_init(struct nouveau_resource **heap, unsigned start,
@@ -306,5 +283,8 @@ nouveau_resource_alloc(struct nouveau_resource *heap, int size, void *priv,
 
 extern void
 nouveau_resource_free(struct nouveau_resource **);
+
+extern struct drm_nouveau_gem_pushbuf_bo *
+nouveau_bo_emit_buffer(struct nouveau_channel *, struct nouveau_bo *);
 
 #endif

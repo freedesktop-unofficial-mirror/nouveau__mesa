@@ -6,7 +6,6 @@
 
 #include "nouveau/nouveau_winsys.h"
 #include "nouveau_drmif.h"
-#include "nouveau_dma.h"
 
 struct nouveau_framebuffer {
 	struct st_framebuffer *stfb;

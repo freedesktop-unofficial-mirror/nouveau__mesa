@@ -29,8 +29,8 @@ nouveau_pipe_grobj_alloc(struct nouveau_winsys *nvws, int grclass,
 	if (ret)
 		return ret;
 
-	assert(nv->nvc->next_subchannel < 7);
-	BIND_RING(chan, *grobj, nv->nvc->next_subchannel++);
+	nouveau_grobj_autobind(*grobj);
+	(*grobj)->bound = NOUVEAU_GROBJ_BOUND_EXPLICIT;
 	return 0;
 }
 
@@ -78,7 +78,7 @@ nouveau_pipe_push_flush(struct nouveau_winsys *nvws, unsigned size,
 		struct nouveau_pushbuf_priv *nvpb = nouveau_pushbuf(pb);
 		struct nouveau_fence *ref = NULL;
 
-		nouveau_fence_ref(nvpb->fence, &ref);
+		nouveau_fence_ref(nvpb->base.fence, &ref);
 		*fence = (struct pipe_fence_handle *)ref;
 	}
 

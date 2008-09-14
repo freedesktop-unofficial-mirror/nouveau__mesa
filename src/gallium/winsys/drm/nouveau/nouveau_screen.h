@@ -9,7 +9,7 @@ struct nouveau_screen {
 
 	struct nouveau_device *device;
 
-	uint32_t front_offset;
+	struct nouveau_bo *front_buffer;
 	uint32_t front_pitch;
 	uint32_t front_cpp;
 	uint32_t front_height;

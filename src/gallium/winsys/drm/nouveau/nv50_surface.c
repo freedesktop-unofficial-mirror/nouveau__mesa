@@ -34,7 +34,7 @@ nv50_surface_set(struct nouveau_context *nv, struct pipe_surface *surf, int dst)
  	if (surf_format < 0)
  		return 1;
   
- 	if (!nouveau_bo(bo)->tiled) {
+ 	if (!bo->tiled) {
  		BEGIN_RING(chan, eng2d, mthd, 2);
  		OUT_RING  (chan, surf_format);
  		OUT_RING  (chan, 1);

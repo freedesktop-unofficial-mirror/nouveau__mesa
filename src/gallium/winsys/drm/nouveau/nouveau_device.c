@@ -26,6 +26,10 @@
 
 #include "nouveau_drmif.h"
 
+#if NOUVEAU_DRM_HEADER_PATCHLEVEL != 108
+#error nouveau_drm.h does not match expected patchlevel, update libdrm.
+#endif
+
 int
 nouveau_device_open_existing(struct nouveau_device **dev, int close,
 			     int fd, drm_context_t ctx)

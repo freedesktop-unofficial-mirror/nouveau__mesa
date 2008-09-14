@@ -25,7 +25,6 @@
 #include <assert.h>
 
 #include "nouveau_drmif.h"
-#include "nouveau_dma.h"
 
 #define PB_BUFMGR_DWORDS   (4096 / 2)
 #define PB_MIN_USER_DWORDS  2048
@@ -36,29 +35,19 @@ nouveau_pushbuf_space(struct nouveau_channel *chan, unsigned min)
 	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
 	struct nouveau_pushbuf_priv *nvpb = &nvchan->pb;
 
-	assert((min + 1) <= nvchan->dma->max);
+	if (nvpb->pushbuf)
+		free(nvpb->pushbuf);
 
-	/* Wait for enough space in push buffer */
-	min = min < PB_MIN_USER_DWORDS ? PB_MIN_USER_DWORDS : min;
-	min += 1; /* a bit extra for the NOP */
-	if (nvchan->dma->free < min)
-		WAIT_RING_CH(chan, min);
+	nvpb->size = min < PB_MIN_USER_DWORDS ? PB_MIN_USER_DWORDS : min;	
+	nvpb->pushbuf = malloc(sizeof(uint32_t) * nvpb->size);
 
-	/* Insert NOP, may turn into a jump later */
-	RING_SPACE_CH(chan, 1);
-	nvpb->nop_jump = nvchan->dma->cur;
-	OUT_RING_CH(chan, 0);
-
-	/* Any remaining space is available to the user */
-	nvpb->start = nvchan->dma->cur;
-	nvpb->size = nvchan->dma->free;
 	nvpb->base.channel = chan;
 	nvpb->base.remaining = nvpb->size;
-	nvpb->base.cur = &nvchan->pushbuf[nvpb->start];
+	nvpb->base.cur = nvpb->pushbuf;
 
 	/* Create a new fence object for this "frame" */
-	nouveau_fence_ref(NULL, &nvpb->fence);
-	nouveau_fence_new(chan, &nvpb->fence);
+	nouveau_fence_ref(NULL, &nvpb->base.fence);
+	nouveau_fence_new(chan, &nvpb->base.fence);
 
 	return 0;
 }
@@ -67,145 +56,65 @@ int
 nouveau_pushbuf_init(struct nouveau_channel *chan)
 {
 	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
-	struct nouveau_dma_priv *m = &nvchan->dma_master;
-	struct nouveau_dma_priv *b = &nvchan->dma_bufmgr;
-	int i;
-
-	if (!nvchan)
-		return -EINVAL;
-
-	/* Reassign last bit of push buffer for a "separate" bufmgr
-	 * ring buffer
-	 */
-	m->max -= PB_BUFMGR_DWORDS;
-	m->free -= PB_BUFMGR_DWORDS;
-
-	b->base = m->base + ((m->max + 2) << 2);
-	b->max = PB_BUFMGR_DWORDS - 2;
-	b->cur = b->put = 0;
-	b->free = b->max - b->cur;
-
-	/* Some NOPs just to be safe
-	 *XXX: RING_SKIPS
-	 */
-	nvchan->dma = b;
-	RING_SPACE_CH(chan, 8);
-	for (i = 0; i < 8; i++)
-		OUT_RING_CH(chan, 0);
-	nvchan->dma = m;
+	struct nouveau_pushbuf_priv *nvpb = &nvchan->pb;
 
 	nouveau_pushbuf_space(chan, 0);
-	chan->pushbuf = &nvchan->pb.base;
 
-	nvchan->pb.buffers = calloc(NOUVEAU_PUSHBUF_MAX_BUFFERS,
-				    sizeof(struct nouveau_pushbuf_bo));
-	nvchan->pb.relocs = calloc(NOUVEAU_PUSHBUF_MAX_RELOCS,
-				   sizeof(struct nouveau_pushbuf_reloc));
+	nvpb->buffers = calloc(NOUVEAU_PUSHBUF_MAX_BUFFERS,
+			       sizeof(struct drm_nouveau_gem_pushbuf_bo));
+	nvpb->relocs = calloc(NOUVEAU_PUSHBUF_MAX_RELOCS,
+			      sizeof(struct drm_nouveau_gem_pushbuf_reloc));
+	
+	chan->pushbuf = &nvpb->base;
 	return 0;
 }
 
-static uint32_t
-nouveau_pushbuf_calc_reloc(struct nouveau_bo *bo,
-			   struct nouveau_pushbuf_reloc *r)
-{
-	uint32_t push;
-
-	if (r->flags & NOUVEAU_BO_LOW) {
-		push = bo->offset + r->data;
-	} else
-	if (r->flags & NOUVEAU_BO_HIGH) {
-		push = (bo->offset + r->data) >> 32;
-	} else {
-		push = r->data;
-	}
-
-	if (r->flags & NOUVEAU_BO_OR) {
-		if (bo->flags & NOUVEAU_BO_VRAM)
-			push |= r->vor;
-		else
-			push |= r->tor;
-	}
-
-	return push;
-}
-
-/* This would be our TTM "superioctl" */
 int
 nouveau_pushbuf_flush(struct nouveau_channel *chan, unsigned min)
 {
+	struct nouveau_device_priv *nvdev = nouveau_device(chan->device);
 	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
 	struct nouveau_pushbuf_priv *nvpb = &nvchan->pb;
+	struct drm_nouveau_gem_pushbuf req;
 	int ret, i;
 
 	if (nvpb->base.remaining == nvpb->size)
 		return 0;
+	nvpb->size -= nvpb->base.remaining;
 
 	nouveau_fence_flush(chan);
 
-	nvpb->size -= nvpb->base.remaining;
-	nvchan->dma->cur += nvpb->size;
-	nvchan->dma->free -= nvpb->size;
-	assert(nvchan->dma->cur <= nvchan->dma->max);
+	req.channel = chan->id;
+	req.nr_dwords = nvpb->size;
+	req.dwords = (uint64_t)(unsigned long)nvpb->pushbuf;
+	req.nr_buffers = nvpb->nr_buffers;
+	req.buffers = (uint64_t)(unsigned long)nvpb->buffers;
+	req.nr_relocs = nvpb->nr_relocs;
+	req.relocs = (uint64_t)(unsigned long)nvpb->relocs;
+	ret = drmCommandWrite(nvdev->fd, DRM_NOUVEAU_GEM_PUSHBUF,
+			      &req, sizeof(req));
+	assert(ret == 0);
 
-	nvchan->dma = &nvchan->dma_bufmgr;
-	nvchan->pushbuf[nvpb->nop_jump] = 0x20000000 |
-		(nvchan->dma->base + (nvchan->dma->cur << 2));
-
-	/* Validate buffers + apply relocations */
-	nvchan->user_charge = 0;
-	for (i = 0; i < nvpb->nr_relocs; i++) {
-		struct nouveau_pushbuf_reloc *r = &nvpb->relocs[i];
-		struct nouveau_pushbuf_bo *pbbo = r->pbbo;
-		struct nouveau_bo *bo = pbbo->bo;
-
-		/* Validated, mem matches presumed, no relocation necessary */
-		if (pbbo->handled & 2) {
-			if (!(pbbo->handled & 1))
-				assert(0);
-			continue;
-		}
-
-		/* Not yet validated, do it now */
-		if (!(pbbo->handled & 1)) {
-			ret = nouveau_bo_validate(chan, bo, pbbo->flags);
-			if (ret) {
-				assert(0);
-				return ret;
-			}
-			pbbo->handled |= 1;
-
-			if (bo->offset == nouveau_bo(bo)->offset &&
-			    bo->flags == nouveau_bo(bo)->flags) {
-				pbbo->handled |= 2;
-				continue;
-			}
-			bo->offset = nouveau_bo(bo)->offset;
-			bo->flags = nouveau_bo(bo)->flags;
-		}
-
-		/* Apply the relocation */
-		*r->ptr = nouveau_pushbuf_calc_reloc(bo, r);
-	}
-	nvpb->nr_relocs = 0;
-
-	/* Dereference all buffers on validate list */
+	/* Update presumed offset/domain for any buffers that moved.
+	 * Dereference all buffers on validate list
+	 */
 	for (i = 0; i < nvpb->nr_buffers; i++) {
-		struct nouveau_pushbuf_bo *pbbo = &nvpb->buffers[i];
+		struct drm_nouveau_gem_pushbuf_bo *pbbo = &nvpb->buffers[i];
+		struct nouveau_bo *bo = (void *)(unsigned long)pbbo->user_priv;
 
-		nouveau_bo(pbbo->bo)->pending = NULL;
-		nouveau_bo_del(&pbbo->bo);
+		if (pbbo->presumed_ok == 0) {
+			nouveau_bo(bo)->domain = pbbo->presumed_domain;
+			nouveau_bo(bo)->offset = pbbo->presumed_offset;
+		}
+
+		nouveau_bo(bo)->pending = NULL;
+		nouveau_bo_del(&bo);
 	}
 	nvpb->nr_buffers = 0;
-
-	/* Switch back to user's ring */
-	RING_SPACE_CH(chan, 1);
-	OUT_RING_CH(chan, 0x20000000 | ((nvpb->start << 2) +
-					nvchan->dma_master.base));
-	nvchan->dma = &nvchan->dma_master;
+	nvpb->nr_relocs = 0;
 
 	/* Fence + kickoff */
-	nouveau_fence_emit(nvpb->fence);
-	FIRE_RING_CH(chan);
+	nouveau_fence_emit(nvpb->base.fence);
 
 	/* Allocate space for next push buffer */
 	ret = nouveau_pushbuf_space(chan, min);
@@ -214,58 +123,73 @@ nouveau_pushbuf_flush(struct nouveau_channel *chan, unsigned min)
 	return 0;
 }
 
-static struct nouveau_pushbuf_bo *
-nouveau_pushbuf_emit_buffer(struct nouveau_channel *chan, struct nouveau_bo *bo)
-{
-	struct nouveau_pushbuf_priv *nvpb = nouveau_pushbuf(chan->pushbuf);
-	struct nouveau_bo_priv *nvbo = nouveau_bo(bo);
-	struct nouveau_pushbuf_bo *pbbo;
-
-	if (nvbo->pending)
-		return nvbo->pending;
-
-	if (nvpb->nr_buffers >= NOUVEAU_PUSHBUF_MAX_BUFFERS)
-		return NULL;
-	pbbo = nvpb->buffers + nvpb->nr_buffers++;
-	nvbo->pending = pbbo;
-
-	nouveau_bo_ref(bo->device, bo->handle, &pbbo->bo);
-	pbbo->channel = chan;
-	pbbo->flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_GART;
-	pbbo->handled = 0;
-	return pbbo;
-}
-
 int
 nouveau_pushbuf_emit_reloc(struct nouveau_channel *chan, void *ptr,
 			   struct nouveau_bo *bo, uint32_t data, uint32_t flags,
 			   uint32_t vor, uint32_t tor)
 {
 	struct nouveau_pushbuf_priv *nvpb = nouveau_pushbuf(chan->pushbuf);
-	struct nouveau_pushbuf_bo *pbbo;
-	struct nouveau_pushbuf_reloc *r;
+	struct drm_nouveau_gem_pushbuf_reloc *r;
+	struct drm_nouveau_gem_pushbuf_bo *pbbo;
+	uint32_t domains = 0;
+	unsigned push = 0;
 
 	if (nvpb->nr_relocs >= NOUVEAU_PUSHBUF_MAX_RELOCS)
 		return -ENOMEM;
 
-	pbbo = nouveau_pushbuf_emit_buffer(chan, bo);
+	if (nouveau_bo(bo)->user && (flags & NOUVEAU_BO_WR)) {
+		NOUVEAU_ERR("write to user buffer!!\n");
+		return -EINVAL;
+	}
+
+	pbbo = nouveau_bo_emit_buffer(chan, bo);
 	if (!pbbo)
 		return -ENOMEM;
-	pbbo->flags |= (flags & NOUVEAU_BO_RDWR);
-	pbbo->flags &= (flags | NOUVEAU_BO_RDWR);
+
+	if (flags & NOUVEAU_BO_VRAM)
+		domains |= NOUVEAU_GEM_DOMAIN_VRAM;
+	if (flags & NOUVEAU_BO_GART)
+		domains |= NOUVEAU_GEM_DOMAIN_GART;
+	pbbo->valid_domains &= domains;
+	assert(pbbo->valid_domains);
+
+	if (flags & NOUVEAU_BO_RD) 
+		pbbo->read_domains |= domains;
+	if (flags & NOUVEAU_BO_WR)
+		pbbo->write_domains |= domains;
 
 	r = nvpb->relocs + nvpb->nr_relocs++;
-	r->pbbo = pbbo;
-	r->ptr = ptr;
-	r->flags = flags;
+	r->bo_index = pbbo - nvpb->buffers;
+	r->reloc_index = (uint32_t *)ptr - nvpb->pushbuf;
+	r->flags = 0;
+	if (flags & NOUVEAU_BO_LOW)
+		r->flags |= NOUVEAU_GEM_RELOC_LOW;
+	if (flags & NOUVEAU_BO_HIGH)
+		r->flags |= NOUVEAU_GEM_RELOC_HIGH;
+	if (flags & NOUVEAU_BO_OR)
+		r->flags |= NOUVEAU_GEM_RELOC_OR;
 	r->data = data;
 	r->vor = vor;
 	r->tor = tor;
 
-	if (flags & NOUVEAU_BO_DUMMY)
-		*(uint32_t *)ptr = 0;
-	else
-		*(uint32_t *)ptr = nouveau_pushbuf_calc_reloc(bo, r);
+	if (!(flags & NOUVEAU_BO_DUMMY)) {
+		if (r->flags & NOUVEAU_GEM_RELOC_LOW)
+			push = (pbbo->presumed_offset + r->data);
+		else
+		if (r->flags & NOUVEAU_GEM_RELOC_HIGH)
+			push = (pbbo->presumed_offset + r->data) >> 32;
+		else
+			push = r->data;
+
+		if (r->flags & NOUVEAU_GEM_RELOC_OR) {
+			if (pbbo->presumed_domain & NOUVEAU_GEM_DOMAIN_VRAM)
+				push |= r->vor;
+			else
+				push |= r->tor;
+		}
+	}
+
+	*(uint32_t *)ptr = push;
 	return 0;
 }
 

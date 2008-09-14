@@ -19,7 +19,6 @@ DRIVER_SOURCES = \
 	nouveau_channel.c \
 	nouveau_context.c \
 	nouveau_device.c \
-	nouveau_dma.c \
 	nouveau_fence.c \
 	nouveau_grobj.c \
 	nouveau_lock.c \

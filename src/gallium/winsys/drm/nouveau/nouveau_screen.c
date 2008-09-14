@@ -13,10 +13,6 @@
 #include "nouveau_screen.h"
 #include "nouveau_swapbuffers.h"
 
-#if NOUVEAU_DRM_HEADER_PATCHLEVEL != 11
-#error nouveau_drm.h version does not match expected version
-#endif
-
 /* Extension stuff, enabling of extensions handled by Gallium's GL state
  * tracker.  But, we still need to define the entry points we want.
  */
@@ -225,7 +221,13 @@ nouveau_screen_create(__DRIscreenPrivate *psp)
 		return GL_FALSE;
 	}
 
-	nv_screen->front_offset = nv_dri->front_offset;
+	ret = nouveau_bo_ref_handle(nv_screen->device, nv_dri->front_handle,
+				    &nv_screen->front_buffer);
+	if (ret) {
+		NOUVEAU_ERR("Error referencing front buffer: %d\n", ret);
+		return GL_FALSE;
+	}
+
 	nv_screen->front_pitch  = nv_dri->front_pitch * (nv_dri->bpp / 8);
 	nv_screen->front_cpp = nv_dri->bpp / 8;
 	nv_screen->front_height = nv_dri->height;

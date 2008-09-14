@@ -25,7 +25,6 @@
 #include <assert.h>
 
 #include "nouveau_drmif.h"
-#include "nouveau_dma.h"
 #include "nouveau_local.h"
 
 static void
@@ -147,10 +146,12 @@ nouveau_fence_emit(struct nouveau_fence *fence)
 	if (nvfence->sequence == 0xffffffff)
 		NOUVEAU_ERR("AII wrap unhandled\n");
 
-	/*XXX: assumes subc 0 is populated */
-	RING_SPACE_CH(fence->channel, 2);
-	OUT_RING_CH  (fence->channel, 0x00040050);
-	OUT_RING_CH  (fence->channel, nvfence->sequence);
+	if (0 && nvchan->base.device->chipset >= 0x10) {
+		/*XXX: assumes subc 0 is populated */
+		RING_SPACE(fence->channel, 2);
+		OUT_RING  (fence->channel, 0x00040050);
+		OUT_RING  (fence->channel, nvfence->sequence);
+	}
 
 	if (nvchan->fence_tail) {
 		nouveau_fence(nvchan->fence_tail)->next = fence;
@@ -160,11 +161,10 @@ nouveau_fence_emit(struct nouveau_fence *fence)
 	nvchan->fence_tail = fence;
 }
 
-void
-nouveau_fence_flush(struct nouveau_channel *chan)
+static void
+nouveau_fence_flush_seq(struct nouveau_channel *chan, unsigned sequence)
 {
 	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
-	uint32_t sequence = *nvchan->ref_cnt;
 
 	while (nvchan->fence_head) {
 		struct nouveau_fence_priv *nvfence;
@@ -194,18 +194,51 @@ nouveau_fence_flush(struct nouveau_channel *chan)
 	}
 }
 
+void
+nouveau_fence_flush(struct nouveau_channel *chan)
+{
+#if 0
+	struct nouveau_channel_priv *nvchan = nouveau_channel(chan);
+
+	if (chan->device->chipset >= 0x10)
+		nouveau_fence_flush_seq(chan, *nvchan->ref_cnt);
+#endif
+}
+
 int
 nouveau_fence_wait(struct nouveau_fence **fence)
 {
 	struct nouveau_fence_priv *nvfence;
-	
+	struct nouveau_channel *chan;
+
 	if (!fence || !*fence)
 		return -EINVAL;
 	nvfence = nouveau_fence(*fence);
+	chan = nvfence->base.channel;
 
 	if (nvfence->emitted) {
+		if (!nvfence->signalled /* && chan->device->chipset < 0x10*/) {
+			struct nouveau_channel_priv *nvchan =
+				nouveau_channel(chan);
+
+			/*XXX: NV04/NV05: Full sync + flush all fences */
+			/*XXX: assumes sc0 is nvchan->fence_grobj */
+
+			nouveau_notifier_reset(nvchan->fence_ntfy, 0);
+			BEGIN_RING(chan, nvchan->fence_grobj, 0x0104, 1);
+			OUT_RING  (chan, 0);
+			BEGIN_RING(chan, nvchan->fence_grobj, 0x0100, 1);
+			OUT_RING  (chan, 0);
+			FIRE_RING (chan);
+			nouveau_notifier_wait_status(nvchan->fence_ntfy,
+						     0, 0, 0);
+
+			nouveau_fence_flush_seq(chan, nouveau_channel(chan)->
+						      fence_sequence);
+		}
+
 		while (!nvfence->signalled)
-			nouveau_fence_flush(nvfence->base.channel);
+			nouveau_fence_flush(chan);
 	}
 	nouveau_fence_ref(NULL, fence);
 

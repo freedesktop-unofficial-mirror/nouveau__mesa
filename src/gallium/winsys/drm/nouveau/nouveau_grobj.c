@@ -43,6 +43,8 @@ nouveau_grobj_alloc(struct nouveau_channel *chan, uint32_t handle,
 	nvgrobj->base.channel = chan;
 	nvgrobj->base.handle  = handle;
 	nvgrobj->base.grclass = class;
+	nvgrobj->base.bound   = NOUVEAU_GROBJ_UNBOUND;
+	nvgrobj->base.subc    = -1;
 
 	g.channel = chan->id;
 	g.handle  = handle;
@@ -103,5 +105,34 @@ nouveau_grobj_free(struct nouveau_grobj **grobj)
 				&f, sizeof(f));	
 	}
 	free(nvgrobj);
+}
+
+void
+nouveau_grobj_autobind(struct nouveau_grobj *grobj)
+{
+	struct nouveau_subchannel *subc = NULL;
+	int i;
+
+	for (i = 0; i < 8; i++) {
+		struct nouveau_subchannel *scc = &grobj->channel->subc[i];
+
+		if (scc->gr && scc->gr->bound == NOUVEAU_GROBJ_BOUND_EXPLICIT)
+			continue;
+
+		if (!subc || scc->sequence < subc->sequence)
+			subc = scc;
+	}
+
+	if (subc->gr) {
+		subc->gr->bound = NOUVEAU_GROBJ_UNBOUND;
+		subc->gr->subc  = -1;
+	}
+
+	subc->gr = grobj;
+	subc->gr->bound = NOUVEAU_GROBJ_BOUND;
+	subc->gr->subc  = subc - &grobj->channel->subc[0];
+
+	BEGIN_RING(grobj->channel, grobj, 0x0000, 1);
+	OUT_RING  (grobj->channel, grobj->handle);
 }
 

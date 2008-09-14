@@ -15,13 +15,8 @@ struct nouveau_dri {
 	uint32_t bus_type;	/**< \brief ths bus type */
 	uint32_t bus_mode;	/**< \brief bus mode (used for AGP, maybe also for PCI-E ?) */
 
-	uint32_t front_offset;	/**< \brief front buffer offset */
-	uint32_t front_pitch;	/**< \brief front buffer pitch */
-	uint32_t back_offset;	/**< \brief private back buffer offset */
-	uint32_t back_pitch;	/**< \brief private back buffer pitch */
-	uint32_t depth_offset;	/**< \brief private depth buffer offset */
-	uint32_t depth_pitch;	/**< \brief private depth buffer pitch */
-
+	uint32_t front_handle;
+	uint32_t front_pitch
 };
 
 #endif

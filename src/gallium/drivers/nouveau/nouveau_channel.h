@@ -23,6 +23,11 @@
 #ifndef __NOUVEAU_CHANNEL_H__
 #define __NOUVEAU_CHANNEL_H__
 
+struct nouveau_subchannel {
+	struct nouveau_grobj *gr;
+	unsigned sequence;
+};
+
 struct nouveau_channel {
 	struct nouveau_device *device;
 	int id;
@@ -35,6 +40,9 @@ struct nouveau_channel {
 
 	void *user_private;
 	void (*hang_notify)(struct nouveau_channel *);
+
+	struct nouveau_subchannel subc[8];
+	unsigned subc_sequence;
 };
 
 #endif
