@@ -4,8 +4,10 @@
 
 #include "util/u_memory.h"
 
+#include "nouveau_bo.h"
+#include "nouveau_fence.h"
+
 #include "nouveau_context.h"
-#include "nouveau_local.h"
 #include "nouveau_screen.h"
 #include "nouveau_swapbuffers.h"
 #include "nouveau_winsys_pipe.h"
@@ -108,7 +110,7 @@ nouveau_pipe_bo_del(struct pipe_winsys *ws, struct pipe_buffer *buf)
 {
 	struct nouveau_pipe_buffer *nvbuf = nouveau_buffer(buf);
 
-	nouveau_bo_del(&nvbuf->bo);
+	nouveau_bo_ref(NULL, &nvbuf->bo);
 	free(nvbuf);
 }
 
@@ -158,10 +160,7 @@ nouveau_pipe_fence_signalled(struct pipe_winsys *ws,
 	struct nouveau_pipe_winsys *nvpws = (struct nouveau_pipe_winsys *)ws;
 	struct nouveau_fence *fence = nouveau_pipe_fence(pfence);
 
-	if (nouveau_fence(fence)->signalled == 0)
-		nouveau_fence_flush(nvpws->nv->nvc->channel);
-
-	return !nouveau_fence(fence)->signalled;
+	return !nouveau_fence_signalled(fence);
 }
 
 static int

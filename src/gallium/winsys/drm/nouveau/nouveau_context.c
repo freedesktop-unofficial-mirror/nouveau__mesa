@@ -11,7 +11,6 @@
 
 #include "nouveau_context.h"
 #include "nouveau_dri.h"
-#include "nouveau_local.h"
 #include "nouveau_screen.h"
 #include "nouveau_winsys_pipe.h"
 
@@ -147,8 +146,7 @@ nouveau_context_create(const __GLcontextModes *glVis,
 		struct nouveau_pipe_buffer *fb_buf;
 
 		fb_buf = calloc(1, sizeof(struct nouveau_pipe_buffer));
-		nouveau_bo_ref(dev, nv_screen->front_buffer->handle,
-			       &fb_buf->bo);
+		nouveau_bo_ref(nv_screen->front_buffer, &fb_buf->bo);
 
 		fb_surf = calloc(1, sizeof(struct pipe_surface));
 		if (nv_screen->front_cpp == 2)

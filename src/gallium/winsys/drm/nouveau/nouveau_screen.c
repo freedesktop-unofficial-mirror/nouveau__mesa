@@ -9,7 +9,6 @@
 #include "nouveau_context.h"
 #include "nouveau_drm.h"
 #include "nouveau_dri.h"
-#include "nouveau_local.h"
 #include "nouveau_screen.h"
 #include "nouveau_swapbuffers.h"
 
@@ -223,7 +222,7 @@ nouveau_screen_create(__DRIscreenPrivate *psp)
 		return GL_FALSE;
 	}
 
-	ret = nouveau_bo_ref_handle(nv_screen->device, nv_dri->front_handle,
+	ret = nouveau_bo_handle_ref(nv_screen->device, nv_dri->front_handle,
 				    &nv_screen->front_buffer);
 	if (ret) {
 		NOUVEAU_ERR("Error referencing front buffer: %d\n", ret);

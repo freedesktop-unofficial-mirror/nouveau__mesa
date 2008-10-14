@@ -8,7 +8,6 @@
 #include "state_tracker/st_cb_fbo.h"
 
 #include "nouveau_context.h"
-#include "nouveau_local.h"
 #include "nouveau_screen.h"
 #include "nouveau_swapbuffers.h"
 

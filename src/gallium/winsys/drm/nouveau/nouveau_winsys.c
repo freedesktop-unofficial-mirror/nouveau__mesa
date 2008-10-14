@@ -75,10 +75,9 @@ nouveau_pipe_push_flush(struct nouveau_winsys *nvws, unsigned size,
 {
 	if (fence) {
 		struct nouveau_pushbuf *pb = nvws->channel->pushbuf;
-		struct nouveau_pushbuf_priv *nvpb = nouveau_pushbuf(pb);
 		struct nouveau_fence *ref = NULL;
 
-		nouveau_fence_ref(nvpb->base.fence, &ref);
+		nouveau_fence_ref(pb->fence, &ref);
 		*fence = (struct pipe_fence_handle *)ref;
 	}
 

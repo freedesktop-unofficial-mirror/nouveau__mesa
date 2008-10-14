@@ -16,7 +16,7 @@ struct nouveau_dri {
 	uint32_t bus_mode;	/**< \brief bus mode (used for AGP, maybe also for PCI-E ?) */
 
 	uint32_t front_handle;
-	uint32_t front_pitch
+	uint32_t front_pitch;
 };
 
 #endif

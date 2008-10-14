@@ -7,6 +7,13 @@
 #include "nouveau/nouveau_winsys.h"
 #include "nouveau_drmif.h"
 
+#include <stdio.h>
+
+#define NOUVEAU_MSG(fmt, args...) \
+	fprintf(stdout, "nouveau: " fmt, ##args)
+#define NOUVEAU_ERR(fmt, args...) \
+	fprintf(stderr, "%s:%d - " fmt, __func__, __LINE__, ##args)
+
 struct nouveau_framebuffer {
 	struct st_framebuffer *stfb;
 };

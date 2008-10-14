@@ -15,16 +15,8 @@ PIPE_DRIVERS = \
 	$(TOP)/src/gallium/drivers/nv50/libnv50.a
 
 DRIVER_SOURCES = \
-	nouveau_bo.c \
-	nouveau_channel.c \
 	nouveau_context.c \
-	nouveau_device.c \
-	nouveau_fence.c \
-	nouveau_grobj.c \
 	nouveau_lock.c \
-	nouveau_notifier.c \
-	nouveau_pushbuf.c \
-	nouveau_resource.c \
 	nouveau_screen.c \
 	nouveau_swapbuffers.c \
 	nouveau_winsys.c \
@@ -38,6 +30,9 @@ C_SOURCES = \
 	$(DRIVER_SOURCES)
 
 ASM_SOURCES = 
+
+DRIVER_DEFINES = $(shell pkg-config --cflags libnouveau_drm)
+DRI_LIB_DEPS += $(shell pkg-config --libs libnouveau_drm)
 
 include ../Makefile.template
 

@@ -2,6 +2,7 @@
 #include "pipe/p_format.h"
 
 #include "nouveau_context.h"
+#include "nouveau_winsys_pipe.h"
 
 static INLINE int
 nv04_surface_format(enum pipe_format format)

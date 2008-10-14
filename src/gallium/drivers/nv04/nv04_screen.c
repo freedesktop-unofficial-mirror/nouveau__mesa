@@ -158,7 +158,7 @@ nv04_screen_create(struct pipe_winsys *ws, struct nouveau_winsys *nvws)
 		fahrenheit_class = 0;
 		sub3d_class = 0;
 	} else if (chipset>=0x10) {
-		fahrenheit_class = NV10_DX5_TEXTURED_TRIANGLE;
+		fahrenheit_class = NV10_DX5_TEXTURE_TRIANGLE;
 		sub3d_class = NV10_CONTEXT_SURFACES_3D;
 	} else {
 		fahrenheit_class=NV04_DX5_TEXTURED_TRIANGLE;
