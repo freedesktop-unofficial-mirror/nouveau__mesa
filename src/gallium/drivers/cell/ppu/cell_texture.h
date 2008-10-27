@@ -48,7 +48,10 @@ struct cell_texture
    struct pipe_buffer *buffer;
    unsigned long buffer_size;
 
-   void *tiled_data[CELL_MAX_TEXTURE_LEVELS];  /* XXX this may be temporary */ /*ALIGN16*/
+   /** Texture data in tiled layout is held here */
+   struct pipe_buffer *tiled_buffer[CELL_MAX_TEXTURE_LEVELS];
+   /** Mapped, tiled texture data */
+   void *tiled_mapped[CELL_MAX_TEXTURE_LEVELS];
 };
 
 
