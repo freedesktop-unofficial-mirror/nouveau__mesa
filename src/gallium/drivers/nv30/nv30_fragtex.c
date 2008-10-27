@@ -98,7 +98,7 @@ nv30_fragtex_build(struct nv30_context *nv30, int unit)
 	if (!tf)
 		assert(0);
 
-	tex_flags |= (tf->swizzled_surface ? NOUVEAU_BO_SWIZZLED : 0);
+	tex_flags |= (tf->swizzled_surface ? /*NOUVEAU_BO_SWIZZLED*/1 : 0);
 
 	txf  = tf->format;
 	txf |= ((pt->last_level>0) ? NV34TCL_TX_FORMAT_MIPMAP : 0);

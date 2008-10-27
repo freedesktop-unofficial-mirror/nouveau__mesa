@@ -170,7 +170,7 @@ nv04_surface_copy_prep(struct nouveau_context *nv, struct pipe_surface *dst,
 
 	/* Setup transfer to swizzle the texture to vram if needed */
 	/* FIXME/TODO: check proper limits of this operation */
-	if (nouveau_buffer(dst->buffer)->bo->flags & NOUVEAU_BO_SWIZZLED) {
+	if (0) { //nouveau_buffer(dst->buffer)->bo->flags & NOUVEAU_BO_SWIZZLED) {
 		/* FIXME: Disable it for the moment */
 		/*return nv04_surface_copy_prep_swizzled(nv, dst, src);*/
 	}
@@ -387,7 +387,7 @@ nouveau_surface_channel_create_nv04(struct nouveau_channel_context *nvc)
 	BEGIN_RING(chan, nvc->NvSIFM, NV04_SCALED_IMAGE_FROM_MEMORY_DMA_IMAGE, 1);
 	OUT_RING  (chan, nvc->channel->vram->handle);
 	BEGIN_RING(chan, nvc->NvSIFM, NV04_SCALED_IMAGE_FROM_MEMORY_SURFACE, 1);
-	OUT_RING  (chan, nvc->NvSwzSurf);
+	OUT_RING  (chan, nvc->NvSwzSurf->handle);
 	BEGIN_RING(chan, nvc->NvSIFM, NV04_SCALED_IMAGE_FROM_MEMORY_PATTERN, 1);
 	OUT_RING  (chan, 0);
 	BEGIN_RING(chan, nvc->NvSIFM, NV04_SCALED_IMAGE_FROM_MEMORY_ROP, 1);
