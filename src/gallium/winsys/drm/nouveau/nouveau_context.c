@@ -8,6 +8,7 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
+#include "pipe/p_inlines.h"
 
 #include "nouveau_context.h"
 #include "nouveau_dri.h"
@@ -141,7 +142,7 @@ nouveau_context_create(const __GLcontextModes *glVis,
 					      debug_control);
 #endif
 
-	{
+	if (!driScrnPriv->dri2.enabled) {
 		struct pipe_surface *fb_surf;
 		struct nouveau_pipe_buffer *fb_buf;
 
@@ -281,11 +282,98 @@ nouveau_context_destroy(__DRIcontextPrivate *driContextPriv)
 	free(nv);
 }
 
+static void
+nouveau_update_drawable(struct nouveau_context *nv, __DRIdrawablePrivate *draw)
+{
+	__DRIscreenPrivate *driScrnPriv = draw->driScreenPriv;
+	__DRIbuffer *buffers;
+	struct nouveau_framebuffer *nvfb = draw->driverPrivate;
+	unsigned int attachments[6];
+	struct pipe_surface *zeta;
+	int i, count;
+
+	i = 0;
+	for (count = 0; count < 6; count++) {
+		if (nvfb->attachments & (1 << count))
+			attachments[i++] = count;
+	}
+
+	buffers = driScrnPriv->dri2.loader->getBuffers(draw, &draw->w, &draw->h,
+						       attachments, i, &count,
+						       draw->loaderPrivate);
+	if (!buffers)
+		return;
+
+	draw->x = 0;
+	draw->y = 0;
+	draw->backX = 0;
+	draw->backY = 0;
+	draw->numClipRects = 1;
+	draw->pClipRects[0].x1 = 0;
+	draw->pClipRects[0].y1 = 0;
+	draw->pClipRects[0].x2 = draw->w;
+	draw->pClipRects[0].y2 = draw->h;
+	draw->numBackClipRects = 1;
+	draw->pBackClipRects[0].x1 = 0;
+	draw->pBackClipRects[0].y1 = 0;
+	draw->pBackClipRects[0].x2 = draw->w;
+	draw->pBackClipRects[0].y2 = draw->h;
+
+	zeta = NULL;
+	for (i = 0; i < count; i++) {
+		__DRIbuffer *buf = &buffers[i];
+		struct pipe_surface *surf;
+		enum pipe_format format;
+		int index;
+
+		surf = nouveau_surface_handle_ref(nv, buffers[i].name,
+						  buffers[i].cpp,
+						  draw->w, draw->h,
+						  buffers[i].pitch);
+		assert(surf);
+
+		switch(buffers[i].attachment) {
+		case __DRI_BUFFER_FRONT_LEFT:
+			index = ST_SURFACE_FRONT_LEFT;
+			if (buf->cpp == 4)
+				format = PIPE_FORMAT_A8R8G8B8_UNORM;
+			else
+				format = PIPE_FORMAT_R5G6B5_UNORM;
+			break;
+		case __DRI_BUFFER_BACK_LEFT:
+			index = ST_SURFACE_BACK_LEFT;
+			if (buf->cpp == 4)
+				format = PIPE_FORMAT_A8R8G8B8_UNORM;
+			else
+				format = PIPE_FORMAT_R5G6B5_UNORM;
+			break;
+		case __DRI_BUFFER_DEPTH:
+			index = ST_SURFACE_DEPTH;
+			if (buf->cpp == 4)
+				format = PIPE_FORMAT_Z24S8_UNORM;
+			else
+				format = PIPE_FORMAT_Z16_UNORM;
+			break;
+		default:
+			assert(0);
+			break;
+		}
+
+		surf = nouveau_surface_handle_ref(nv, buf->name, format,
+						  draw->w, draw->h, buf->pitch);
+		assert(surf);
+		st_set_framebuffer_surface(nvfb->stfb, index, surf);
+	}
+
+	st_resize_framebuffer(nvfb->stfb, draw->w, draw->h);
+}
+
 GLboolean
 nouveau_context_bind(__DRIcontextPrivate *driContextPriv,
 		     __DRIdrawablePrivate *driDrawPriv,
 		     __DRIdrawablePrivate *driReadPriv)
 {
+	__DRIscreenPrivate *driScrnPriv = driContextPriv->driScreenPriv;
 	struct nouveau_context *nv;
 	struct nouveau_framebuffer *draw, *read;
 
@@ -298,20 +386,26 @@ nouveau_context_bind(__DRIcontextPrivate *driContextPriv,
 	draw = driDrawPriv->driverPrivate;
 	read = driReadPriv->driverPrivate;
 
+	if (driScrnPriv->dri2.enabled) {
+		nouveau_update_drawable(nv, driDrawPriv);
+		if (driDrawPriv != driReadPriv)
+			nouveau_update_drawable(nv, driReadPriv);
+	} else {
+		if ((nv->dri_drawable != driDrawPriv) ||
+		    (nv->last_stamp != driDrawPriv->lastStamp)) {
+			nv->dri_drawable = driDrawPriv;
+			st_resize_framebuffer(draw->stfb, driDrawPriv->w,
+					      driDrawPriv->h);
+			nv->last_stamp = driDrawPriv->lastStamp;
+		}
+
+		if (driDrawPriv != driReadPriv) {
+			st_resize_framebuffer(read->stfb, driReadPriv->w,
+					      driReadPriv->h);
+		}
+	}
+
 	st_make_current(nv->st, draw->stfb, read->stfb);
-
-	if ((nv->dri_drawable != driDrawPriv) ||
-	    (nv->last_stamp != driDrawPriv->lastStamp)) {
-		nv->dri_drawable = driDrawPriv;
-		st_resize_framebuffer(draw->stfb, driDrawPriv->w,
-				      driDrawPriv->h);
-		nv->last_stamp = driDrawPriv->lastStamp;
-	}
-
-	if (driDrawPriv != driReadPriv) {
-		st_resize_framebuffer(read->stfb, driReadPriv->w,
-				      driReadPriv->h);
-	}
 
 	return GL_TRUE;
 }

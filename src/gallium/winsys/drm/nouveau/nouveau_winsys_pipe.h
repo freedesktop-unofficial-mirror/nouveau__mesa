@@ -31,4 +31,11 @@ nouveau_create_softpipe(struct nouveau_context *nv);
 struct pipe_context *
 nouveau_pipe_create(struct nouveau_context *nv);
 
+struct pipe_buffer *
+nouveau_pipe_bo_handle_ref(struct nouveau_context *nv, uint32_t handle);
+
+struct pipe_surface *
+nouveau_surface_handle_ref(struct nouveau_context *nv, uint32_t handle,
+			   enum pipe_format format, int w, int h, int pitch);
+
 #endif

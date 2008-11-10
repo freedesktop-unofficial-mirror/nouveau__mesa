@@ -16,6 +16,7 @@
 
 struct nouveau_framebuffer {
 	struct st_framebuffer *stfb;
+	unsigned attachments;
 };
 
 struct nouveau_channel_context {
@@ -47,6 +48,7 @@ struct nouveau_channel_context {
 
 struct nouveau_context {
 	struct st_context *st;
+	struct pipe_winsys *winsys;
 
 	/* DRI stuff */
 	__DRIscreenPrivate    *dri_screen;

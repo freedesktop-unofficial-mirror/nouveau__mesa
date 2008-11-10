@@ -19,6 +19,8 @@ nouveau_flush_frontbuffer(struct pipe_winsys *pws, struct pipe_surface *surf,
 	struct nouveau_context *nv = context_private;
 	__DRIdrawablePrivate *dPriv = nv->dri_drawable;
 
+	if (!dPriv)
+		return;
 	nouveau_copy_buffer(dPriv, surf, NULL);
 }
 
@@ -26,6 +28,34 @@ static const char *
 nouveau_get_name(struct pipe_winsys *pws)
 {
 	return "Nouveau/DRI";
+}
+
+struct pipe_surface *
+nouveau_surface_handle_ref(struct nouveau_context *nv, uint32_t handle,
+			   enum pipe_format format, int w, int h, int pitch)
+{
+	struct pipe_winsys *ws = nv->winsys;
+	struct pipe_surface *ps;
+
+	ps = ws->surface_alloc(ws);
+	if (ps) {
+		ps->buffer = nouveau_pipe_bo_handle_ref(nv, handle);
+		if (!ps->buffer)
+			ws->surface_release(ws, &ps);
+
+		ps->format = format;
+		ps->width = w;
+		ps->height = h;
+		pf_get_block(ps->format, &ps->block);
+		ps->nblocksx = pf_get_nblocksx(&ps->block, w);
+		ps->nblocksy = pf_get_nblocksy(&ps->block, h);
+		ps->stride = pitch;
+		ps->status = PIPE_SURFACE_STATUS_DEFINED;
+		ps->refcount = 1;
+		ps->winsys = nv->winsys;
+	}
+
+	return ps;
 }
 
 static struct pipe_surface *
@@ -53,6 +83,29 @@ nouveau_surface_release(struct pipe_winsys *ws, struct pipe_surface **pps)
 			winsys_buffer_reference(ws, &ps->buffer, NULL);
 		FREE(ps);
 	}
+}
+
+struct pipe_buffer *
+nouveau_pipe_bo_handle_ref(struct nouveau_context *nv, uint32_t handle)
+{
+	struct nouveau_pipe_buffer *nvbuf;
+	struct nouveau_bo *bo = NULL;
+	int ret;
+
+	ret = nouveau_bo_handle_ref(nv->nv_screen->device, handle, &bo);
+	if (ret)
+		return NULL;
+
+	nvbuf = CALLOC_STRUCT(nouveau_pipe_buffer);
+	if (!nvbuf) {
+		nouveau_bo_ref(NULL, &bo);
+		return NULL;
+	}
+
+	nvbuf->base.refcount = 1;
+	nvbuf->base.usage = PIPE_BUFFER_USAGE_PIXEL;
+	nvbuf->bo = bo;
+	return &nvbuf->base;
 }
 
 static struct pipe_buffer *

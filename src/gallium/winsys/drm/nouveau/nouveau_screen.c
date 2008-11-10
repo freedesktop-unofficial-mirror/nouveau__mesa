@@ -74,6 +74,12 @@ nouveau_create_buffer(__DRIscreenPrivate * driScrnPriv,
 	if (!nvfb)
 		return GL_FALSE;
 
+	nvfb->attachments = (1 << __DRI_BUFFER_FRONT_LEFT);
+	if (glVis->doubleBufferMode)
+		nvfb->attachments |= (1 << __DRI_BUFFER_BACK_LEFT);
+	if (glVis->depthBits || glVis->stencilBits)
+		nvfb->attachments |= (1 << __DRI_BUFFER_DEPTH);
+
 	if (glVis->redBits == 5)
 		colour = PIPE_FORMAT_R5G6B5_UNORM;
 	else
@@ -239,6 +245,33 @@ nouveau_screen_create(__DRIscreenPrivate *psp)
 				      (nv_dri->bpp == 16) ? 0 : 8, 1);
 }
 
+static const __DRIconfig **
+nouveau_screen_create_dri2(__DRIscreenPrivate *psp)
+{
+	struct nouveau_screen *nv_screen;
+	int ret;
+
+	driInitExtensions(NULL, card_extensions, GL_FALSE);
+
+	nv_screen = CALLOC_STRUCT(nouveau_screen);
+	if (!nv_screen)
+		return GL_FALSE;
+	nv_screen->driScrnPriv = psp;
+	psp->private = (void *)nv_screen;
+
+	driParseOptionInfo(&nv_screen->option_cache,
+			   __driConfigOptions, __driNConfigOptions);
+
+	if ((ret = nouveau_device_open_existing(&nv_screen->device, 0,
+						psp->fd, 0))) {
+		NOUVEAU_ERR("Failed opening nouveau device: %d\n", ret);
+		return GL_FALSE;
+	}
+
+
+	return (const __DRIconfig **)nouveau_fill_in_modes(psp, 24, 24, 8, 1);
+}
+
 static void
 nouveau_screen_destroy(__DRIscreenPrivate *driScrnPriv)
 {
@@ -261,6 +294,6 @@ driDriverAPI = {
 	.UnbindContext	= nouveau_context_unbind,
 	.CopySubBuffer	= nouveau_copy_sub_buffer,
 
-	.InitScreen2	= NULL, /* one day, I promise! */
+	.InitScreen2	= nouveau_screen_create_dri2,
 };
 
