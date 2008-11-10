@@ -28,6 +28,33 @@ nouveau_get_name(struct pipe_winsys *pws)
 	return "Nouveau/DRI";
 }
 
+static struct pipe_surface *
+nouveau_surface_alloc(struct pipe_winsys *ws)
+{
+	struct pipe_surface *ps;
+	
+	ps = CALLOC_STRUCT(pipe_surface);
+	if (ps) {
+		ps->refcount = 1;
+		ps->winsys = ws;
+	}
+
+	return ps;
+}
+
+static void
+nouveau_surface_release(struct pipe_winsys *ws, struct pipe_surface **pps)
+{
+	struct pipe_surface *ps = *pps;
+
+	*pps = NULL;
+	if (!(--ps->refcount)) {
+		if (ps->buffer)
+			winsys_buffer_reference(ws, &ps->buffer, NULL);
+		FREE(ps);
+	}
+}
+
 static struct pipe_buffer *
 nouveau_pipe_bo_create(struct pipe_winsys *pws, unsigned alignment,
 		       unsigned usage, unsigned size)
@@ -187,6 +214,9 @@ nouveau_create_pipe_winsys(struct nouveau_context *nv)
 	pws = &nvpws->pws;
 
 	pws->flush_frontbuffer = nouveau_flush_frontbuffer;
+
+	pws->surface_alloc = nouveau_surface_alloc;
+	pws->surface_release = nouveau_surface_release;
 
 	pws->buffer_create = nouveau_pipe_bo_create;
 	pws->buffer_destroy = nouveau_pipe_bo_del;
