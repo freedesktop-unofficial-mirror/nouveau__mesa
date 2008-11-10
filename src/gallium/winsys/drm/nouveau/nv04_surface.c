@@ -282,7 +282,6 @@ nouveau_surface_channel_create_nv04(struct nouveau_channel_context *nvc)
 		NOUVEAU_ERR("Error creating m2mf object: %d\n", ret);
 		return 1;
 	}
-	BIND_RING (chan, nvc->NvM2MF, nvc->next_subchannel++);
 	BEGIN_RING(chan, nvc->NvM2MF,
 		   NV04_MEMORY_TO_MEMORY_FORMAT_DMA_NOTIFY, 1);
 	OUT_RING  (chan, nvc->sync_notifier->handle);
@@ -294,7 +293,6 @@ nouveau_surface_channel_create_nv04(struct nouveau_channel_context *nvc)
 		NOUVEAU_ERR("Error creating 2D surface object: %d\n", ret);
 		return 1;
 	}
-	BIND_RING (chan, nvc->NvCtxSurf2D, nvc->next_subchannel++);
 	BEGIN_RING(chan, nvc->NvCtxSurf2D,
 		   NV04_CONTEXT_SURFACES_2D_DMA_IMAGE_SOURCE, 2);
 	OUT_RING  (chan, nvc->channel->vram->handle);
@@ -306,7 +304,6 @@ nouveau_surface_channel_create_nv04(struct nouveau_channel_context *nvc)
 		NOUVEAU_ERR("Error creating blit object: %d\n", ret);
 		return 1;
 	}
-	BIND_RING (chan, nvc->NvImageBlit, nvc->next_subchannel++);
 	BEGIN_RING(chan, nvc->NvImageBlit, NV04_IMAGE_BLIT_DMA_NOTIFY, 1);
 	OUT_RING  (chan, nvc->sync_notifier->handle);
 	BEGIN_RING(chan, nvc->NvImageBlit, NV04_IMAGE_BLIT_SURFACE, 1);
@@ -320,7 +317,6 @@ nouveau_surface_channel_create_nv04(struct nouveau_channel_context *nvc)
 		NOUVEAU_ERR("Error creating rect object: %d\n", ret);
 		return 1;
 	}
-	BIND_RING (chan, nvc->NvGdiRect, nvc->next_subchannel++);
 	BEGIN_RING(chan, nvc->NvGdiRect, NV04_GDI_RECTANGLE_TEXT_DMA_NOTIFY, 1);
 	OUT_RING  (chan, nvc->sync_notifier->handle);
 	BEGIN_RING(chan, nvc->NvGdiRect, NV04_GDI_RECTANGLE_TEXT_SURFACE, 1);
@@ -359,7 +355,6 @@ nouveau_surface_channel_create_nv04(struct nouveau_channel_context *nvc)
 		return 1;
 	}
 
-	BIND_RING (chan, nvc->NvSwzSurf, nvc->next_subchannel++);
 	BEGIN_RING(chan, nvc->NvSwzSurf, NV04_SWIZZLED_SURFACE_DMA_NOTIFY, 1);
 	OUT_RING  (chan, nvc->sync_notifier->handle);
 	BEGIN_RING(chan, nvc->NvSwzSurf, NV04_SWIZZLED_SURFACE_DMA_IMAGE, 1);
@@ -381,7 +376,6 @@ nouveau_surface_channel_create_nv04(struct nouveau_channel_context *nvc)
 		return 1;
 	}
 
-	BIND_RING (chan, nvc->NvSIFM, nvc->next_subchannel++);
 	BEGIN_RING(chan, nvc->NvSIFM, NV04_SCALED_IMAGE_FROM_MEMORY_DMA_NOTIFY, 1);
 	OUT_RING  (chan, 0);
 	BEGIN_RING(chan, nvc->NvSIFM, NV04_SCALED_IMAGE_FROM_MEMORY_DMA_IMAGE, 1);

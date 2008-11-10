@@ -42,7 +42,6 @@ struct nouveau_channel_context {
 	struct nouveau_grobj    *Nv2D;
 
 	uint32_t                 next_handle;
-	uint32_t                 next_subchannel;
 	uint32_t                 next_sequence;
 };
 
