@@ -34,26 +34,49 @@ struct pipe_surface *
 nouveau_surface_handle_ref(struct nouveau_context *nv, uint32_t handle,
 			   enum pipe_format format, int w, int h, int pitch)
 {
+	struct pipe_screen *pscreen = nv->nvc->pscreen;
 	struct pipe_winsys *ws = nv->winsys;
+	struct pipe_texture tmpl;
 	struct pipe_surface *ps;
+	struct pipe_buffer *pb;
+
+	pb = nouveau_pipe_bo_handle_ref(nv, handle);
+	if (!pb)
+		return NULL;
 
 	ps = ws->surface_alloc(ws);
-	if (ps) {
-		ps->buffer = nouveau_pipe_bo_handle_ref(nv, handle);
-		if (!ps->buffer)
-			ws->surface_release(ws, &ps);
-
-		ps->format = format;
-		ps->width = w;
-		ps->height = h;
-		pf_get_block(ps->format, &ps->block);
-		ps->nblocksx = pf_get_nblocksx(&ps->block, w);
-		ps->nblocksy = pf_get_nblocksy(&ps->block, h);
-		ps->stride = pitch;
-		ps->status = PIPE_SURFACE_STATUS_DEFINED;
-		ps->refcount = 1;
-		ps->winsys = nv->winsys;
+	if (!ps) {
+		pipe_buffer_reference(pscreen, &pb, NULL);
+		return NULL;
 	}
+
+	ps->buffer = pb;
+	ps->format = format;
+	ps->width = w;
+	ps->height = h;
+	pf_get_block(ps->format, &ps->block);
+	ps->nblocksx = pf_get_nblocksx(&ps->block, w);
+	ps->nblocksy = pf_get_nblocksy(&ps->block, h);
+	ps->stride = pitch;
+	ps->status = PIPE_SURFACE_STATUS_DEFINED;
+	ps->refcount = 1;
+	ps->winsys = nv->winsys;
+
+	memset(&tmpl, 0, sizeof(tmpl));
+	tmpl.tex_usage = PIPE_TEXTURE_USAGE_DISPLAY_TARGET;
+	tmpl.target = PIPE_TEXTURE_2D;
+	tmpl.width[0] = w;
+	tmpl.height[0] = h;
+	tmpl.depth[0] = 1;
+	tmpl.format = format;
+	pf_get_block(tmpl.format, &tmpl.block);
+	tmpl.nblocksx[0] = pf_get_nblocksx(&tmpl.block, w);
+	tmpl.nblocksy[0] = pf_get_nblocksy(&tmpl.block, h);
+
+	ps->texture = pscreen->texture_blanket(pscreen, &tmpl,
+					       &ps->stride, ps->buffer);
+	if (!ps->texture)
+		ws->surface_release(ws, &ps);
 
 	return ps;
 }
@@ -237,7 +260,6 @@ static int
 nouveau_pipe_fence_signalled(struct pipe_winsys *ws,
 			     struct pipe_fence_handle *pfence, unsigned flag)
 {
-	struct nouveau_pipe_winsys *nvpws = (struct nouveau_pipe_winsys *)ws;
 	struct nouveau_fence *fence = nouveau_pipe_fence(pfence);
 
 	return !nouveau_fence_signalled(fence);
