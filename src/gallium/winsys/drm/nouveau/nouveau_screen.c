@@ -269,7 +269,8 @@ nouveau_screen_create_dri2(__DRIscreenPrivate *psp)
 	}
 
 
-	return (const __DRIconfig **)nouveau_fill_in_modes(psp, 24, 24, 8, 1);
+	return driConcatConfigs(nouveau_fill_in_modes(psp, 32, 24, 8, 1),
+				nouveau_fill_in_modes(psp, 16, 16, 0, 1));
 }
 
 static void
