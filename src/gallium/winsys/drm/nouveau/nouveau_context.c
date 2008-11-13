@@ -386,6 +386,8 @@ nouveau_context_bind(__DRIcontextPrivate *driContextPriv,
 	draw = driDrawPriv->driverPrivate;
 	read = driReadPriv->driverPrivate;
 
+	st_make_current(nv->st, draw->stfb, read->stfb);
+
 	if (driScrnPriv->dri2.enabled) {
 		nouveau_update_drawable(nv, driDrawPriv);
 		if (driDrawPriv != driReadPriv)
@@ -405,7 +407,6 @@ nouveau_context_bind(__DRIcontextPrivate *driContextPriv,
 		}
 	}
 
-	st_make_current(nv->st, draw->stfb, read->stfb);
 
 	return GL_TRUE;
 }
