@@ -27,6 +27,11 @@ nouveau_flush_frontbuffer(struct pipe_winsys *pws, struct pipe_surface *surf,
 static const char *
 nouveau_get_name(struct pipe_winsys *pws)
 {
+	struct nouveau_pipe_winsys *nvpws = (struct nouveau_pipe_winsys *)pws;
+	struct nouveau_context *nv = nvpws->nv;
+
+	if (nv->dri_screen->dri2.enabled)
+		return "Nouveau/DRI2";
 	return "Nouveau/DRI";
 }
 
