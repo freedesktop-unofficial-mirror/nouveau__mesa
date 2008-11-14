@@ -91,6 +91,9 @@ extern GLboolean nouveau_context_bind(__DRIcontextPrivate *,
 				      __DRIdrawablePrivate *read);
 extern GLboolean nouveau_context_unbind(__DRIcontextPrivate *);
 
+void
+nouveau_update_drawable(struct nouveau_context *, __DRIdrawablePrivate *);
+
 #ifdef DEBUG
 extern int __nouveau_debug;
 

@@ -282,7 +282,7 @@ nouveau_context_destroy(__DRIcontextPrivate *driContextPriv)
 	free(nv);
 }
 
-static void
+void
 nouveau_update_drawable(struct nouveau_context *nv, __DRIdrawablePrivate *draw)
 {
 	__DRIscreenPrivate *driScrnPriv = draw->driScreenPriv;

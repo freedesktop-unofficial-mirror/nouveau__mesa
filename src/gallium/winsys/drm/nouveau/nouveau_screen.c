@@ -245,6 +245,42 @@ nouveau_screen_create(__DRIscreenPrivate *psp)
 				      (nv_dri->bpp == 16) ? 0 : 8, 1);
 }
 
+static void
+nouveau_screen_set_tex_buffer(__DRIcontext *pDRICtx, GLint target,
+			      __DRIdrawable *dPriv)
+{
+	struct nouveau_framebuffer *nvfb = dPriv->driverPrivate;
+	struct nouveau_context *nv = pDRICtx->driverPrivate;
+	struct pipe_texture *pt;
+
+	switch (target) {
+	case GL_TEXTURE_2D:
+		target = ST_TEXTURE_2D;
+		break;
+	case GL_TEXTURE_RECTANGLE_ARB:
+		target = ST_TEXTURE_RECT;
+		break;
+	default:
+		NOUVEAU_ERR("invalid texture target %d\n", target);
+		return;
+	}
+
+	nouveau_update_drawable(nv, dPriv);
+
+	pt = st_get_framebuffer_texture(nvfb->stfb, ST_SURFACE_FRONT_LEFT);
+	st_set_teximage(pt, target);
+}
+
+static const __DRItexBufferExtension nouveau_screen_set_tex_buffer_ext = {
+	{ __DRI_TEX_BUFFER, __DRI_TEX_BUFFER_VERSION },
+	nouveau_screen_set_tex_buffer
+};
+
+static const __DRIextension *nouveau_screen_extensions[] = {
+	&driReadDrawableExtension,
+	&nouveau_screen_set_tex_buffer_ext.base,
+};
+
 static const __DRIconfig **
 nouveau_screen_create_dri2(__DRIscreenPrivate *psp)
 {
@@ -258,6 +294,7 @@ nouveau_screen_create_dri2(__DRIscreenPrivate *psp)
 		return GL_FALSE;
 	nv_screen->driScrnPriv = psp;
 	psp->private = (void *)nv_screen;
+	psp->extensions = nouveau_screen_extensions;
 
 	driParseOptionInfo(&nv_screen->option_cache,
 			   __driConfigOptions, __driNConfigOptions);
