@@ -8,7 +8,6 @@ static void
 nv40_miptree_layout(struct nv40_miptree *mt)
 {
 	struct pipe_texture *pt = &mt->base;
-	boolean swizzled = FALSE;
 	uint width = pt->width[0], height = pt->height[0], depth = pt->depth[0];
 	uint offset = 0;
 	int nr_faces, l, f, pitch;
@@ -30,7 +29,7 @@ nv40_miptree_layout(struct nv40_miptree *mt)
 		pt->nblocksx[l] = pf_get_nblocksx(&pt->block, width);
 		pt->nblocksy[l] = pf_get_nblocksy(&pt->block, height);
 
-		if (swizzled)
+		if (!(pt->tex_usage & NOUVEAU_TEXTURE_USAGE_LINEAR))
 			pitch = pt->nblocksx[l];
 		pitch = align(pitch, 64);
 
@@ -65,6 +64,29 @@ nv40_miptree_create(struct pipe_screen *pscreen, const struct pipe_texture *pt)
 	mt->base = *pt;
 	mt->base.refcount = 1;
 	mt->base.screen = pscreen;
+	mt->shadow_tex = NULL;
+	mt->shadow_surface = NULL;
+
+	/* Swizzled textures must be POT */
+	if (pt->width[0] & (pt->width[0] - 1) ||
+	    pt->height[0] & (pt->height[0] - 1))
+		mt->base.tex_usage |= NOUVEAU_TEXTURE_USAGE_LINEAR;
+	else
+	if (pt->tex_usage & (PIPE_TEXTURE_USAGE_PRIMARY |
+	                     PIPE_TEXTURE_USAGE_DISPLAY_TARGET))
+		mt->base.tex_usage |= NOUVEAU_TEXTURE_USAGE_LINEAR;
+	else {
+		switch (pt->format) {
+		/* TODO: Figure out which formats can be swizzled */
+		case PIPE_FORMAT_A8R8G8B8_UNORM:
+		case PIPE_FORMAT_X8R8G8B8_UNORM:
+		/* XXX: Re-enable when SIFM size limits are fixed */
+		/*case PIPE_FORMAT_R16_SNORM:*/
+			break;
+		default:
+			mt->base.tex_usage |= NOUVEAU_TEXTURE_USAGE_LINEAR;
+		}
+	}
 
 	nv40_miptree_layout(mt);
 
@@ -116,11 +138,16 @@ nv40_miptree_release(struct pipe_screen *pscreen, struct pipe_texture **ppt)
 	if (--pt->refcount)
 		return;
 
-
 	pipe_buffer_reference(pscreen, &mt->buffer, NULL);
 	for (l = 0; l <= pt->last_level; l++) {
 		if (mt->level[l].image_offset)
 			FREE(mt->level[l].image_offset);
+	}
+
+	if (mt->shadow_tex) {
+		assert(mt->shadow_surface);
+		pscreen->tex_surface_release(pscreen, &mt->shadow_surface);
+		nv40_miptree_release(pscreen, &mt->shadow_tex);
 	}
 
 	FREE(mt);
@@ -150,6 +177,9 @@ nv40_miptree_surface_new(struct pipe_screen *pscreen, struct pipe_texture *pt,
 	ps->status = PIPE_SURFACE_STATUS_DEFINED;
 	ps->refcount = 1;
 	ps->winsys = pscreen->winsys;
+	ps->face = face;
+	ps->level = level;
+	ps->zslice = zslice;
 
 	if (pt->target == PIPE_TEXTURE_CUBE) {
 		ps->offset = mt->level[level].image_offset[face];

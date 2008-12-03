@@ -30,6 +30,9 @@ extern "C" {
 #endif
 
 
+struct slang_ir_storage_;
+
+
 typedef enum slang_type_variant_
 {
    SLANG_VARIANT,    /* the default */
@@ -81,6 +84,7 @@ typedef struct slang_fully_specified_type_
    slang_type_precision precision;
    slang_type_variant variant;
    slang_type_centroid centroid;
+   GLint array_len;           /**< -1 if not an array type */
 } slang_fully_specified_type;
 
 extern int
@@ -107,7 +111,7 @@ typedef struct slang_variable_
    GLuint size;                     /**< Variable's size in bytes */
    GLboolean isTemp;                /**< a named temporary (__resultTmp) */
    GLboolean declared;              /**< for debug */
-   void *aux;                       /**< Used during code gen */
+   struct slang_ir_storage_ *store; /**< Storage for this var */
 } slang_variable;
 
 

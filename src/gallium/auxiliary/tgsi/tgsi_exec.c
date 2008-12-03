@@ -133,7 +133,7 @@ tgsi_exec_machine_bind_shader(
    struct tgsi_exec_machine *mach,
    const struct tgsi_token *tokens,
    uint numSamplers,
-   struct tgsi_sampler *samplers)
+   struct tgsi_sampler **samplers)
 {
    uint k;
    struct tgsi_parse_context parse;
@@ -464,17 +464,6 @@ micro_exp2(
    dst->f[2] = powf( 2.0f, src->f[2] );
    dst->f[3] = powf( 2.0f, src->f[3] );
 #endif
-}
-
-static void
-micro_f2it(
-   union tgsi_exec_channel *dst,
-   const union tgsi_exec_channel *src )
-{
-   dst->i[0] = (int) src->f[0];
-   dst->i[1] = (int) src->f[1];
-   dst->i[2] = (int) src->f[2];
-   dst->i[3] = (int) src->f[3];
 }
 
 static void
@@ -840,6 +829,17 @@ micro_rnd(
 }
 
 static void
+micro_sgn(
+   union tgsi_exec_channel *dst,
+   const union tgsi_exec_channel *src )
+{
+   dst->f[0] = src->f[0] < 0.0f ? -1.0f : src->f[0] > 0.0f ? 1.0f : 0.0f;
+   dst->f[1] = src->f[1] < 0.0f ? -1.0f : src->f[1] > 0.0f ? 1.0f : 0.0f;
+   dst->f[2] = src->f[2] < 0.0f ? -1.0f : src->f[2] > 0.0f ? 1.0f : 0.0f;
+   dst->f[3] = src->f[3] < 0.0f ? -1.0f : src->f[3] > 0.0f ? 1.0f : 0.0f;
+}
+
+static void
 micro_shl(
    union tgsi_exec_channel *dst,
    const union tgsi_exec_channel *src0,
@@ -958,14 +958,22 @@ fetch_src_file_channel(
       switch( file ) {
       case TGSI_FILE_CONSTANT:
          assert(mach->Consts);
-         assert(index->i[0] >= 0);
-         assert(index->i[1] >= 0);
-         assert(index->i[2] >= 0);
-         assert(index->i[3] >= 0);
-         chan->f[0] = mach->Consts[index->i[0]][swizzle];
-         chan->f[1] = mach->Consts[index->i[1]][swizzle];
-         chan->f[2] = mach->Consts[index->i[2]][swizzle];
-         chan->f[3] = mach->Consts[index->i[3]][swizzle];
+         if (index->i[0] < 0)
+            chan->f[0] = 0.0f;
+         else
+            chan->f[0] = mach->Consts[index->i[0]][swizzle];
+         if (index->i[1] < 0)
+            chan->f[1] = 0.0f;
+         else
+            chan->f[1] = mach->Consts[index->i[1]][swizzle];
+         if (index->i[2] < 0)
+            chan->f[2] = 0.0f;
+         else
+            chan->f[2] = mach->Consts[index->i[2]][swizzle];
+         if (index->i[3] < 0)
+            chan->f[3] = 0.0f;
+         else
+            chan->f[3] = mach->Consts[index->i[3]][swizzle];
          break;
 
       case TGSI_FILE_INPUT:
@@ -1081,10 +1089,10 @@ fetch_source(
          &indir_index );
 
       /* add value of address register to the offset */
-      index.i[0] += indir_index.i[0];
-      index.i[1] += indir_index.i[1];
-      index.i[2] += indir_index.i[2];
-      index.i[3] += indir_index.i[3];
+      index.i[0] += (int) indir_index.f[0];
+      index.i[1] += (int) indir_index.f[1];
+      index.i[2] += (int) indir_index.f[2];
+      index.i[3] += (int) indir_index.f[3];
 
       /* for disabled execution channels, zero-out the index to
        * avoid using a potential garbage value.
@@ -1160,10 +1168,10 @@ fetch_source(
             &index2,
             &indir_index );
 
-         index.i[0] += indir_index.i[0];
-         index.i[1] += indir_index.i[1];
-         index.i[2] += indir_index.i[2];
-         index.i[3] += indir_index.i[3];
+         index.i[0] += (int) indir_index.f[0];
+         index.i[1] += (int) indir_index.f[1];
+         index.i[2] += (int) indir_index.f[2];
+         index.i[3] += (int) indir_index.f[3];
 
          /* for disabled execution channels, zero-out the index to
           * avoid using a potential garbage value.
@@ -1527,7 +1535,7 @@ exec_kilp(struct tgsi_exec_machine *mach,
 
 
 /*
- * Fetch a texel using STR texture coordinates.
+ * Fetch a four texture samples using STR texture coordinates.
  */
 static void
 fetch_texel( struct tgsi_sampler *sampler,
@@ -1561,7 +1569,7 @@ exec_tex(struct tgsi_exec_machine *mach,
          boolean projected)
 {
    const uint unit = inst->FullSrcRegisters[1].SrcRegister.Index;
-   union tgsi_exec_channel r[8];
+   union tgsi_exec_channel r[4];
    uint chan_index;
    float lodBias;
 
@@ -1584,7 +1592,7 @@ exec_tex(struct tgsi_exec_machine *mach,
       else
          lodBias = 0.0;
 
-      fetch_texel(&mach->Samplers[unit],
+      fetch_texel(mach->Samplers[unit],
                   &r[0], NULL, NULL, lodBias,  /* S, T, P, BIAS */
                   &r[0], &r[1], &r[2], &r[3]); /* R, G, B, A */
       break;
@@ -1610,7 +1618,7 @@ exec_tex(struct tgsi_exec_machine *mach,
       else
          lodBias = 0.0;
 
-      fetch_texel(&mach->Samplers[unit],
+      fetch_texel(mach->Samplers[unit],
                   &r[0], &r[1], &r[2], lodBias,  /* inputs */
                   &r[0], &r[1], &r[2], &r[3]);  /* outputs */
       break;
@@ -1636,7 +1644,7 @@ exec_tex(struct tgsi_exec_machine *mach,
       else
          lodBias = 0.0;
 
-      fetch_texel(&mach->Samplers[unit],
+      fetch_texel(mach->Samplers[unit],
                   &r[0], &r[1], &r[2], lodBias,
                   &r[0], &r[1], &r[2], &r[3]);
       break;
@@ -1789,7 +1797,7 @@ exec_instruction(
    case TGSI_OPCODE_ARL:
       FOR_EACH_ENABLED_CHANNEL( *inst, chan_index ) {
          FETCH( &r[0], 0, chan_index );
-         micro_f2it( &r[0], &r[0] );
+         micro_trunc( &r[0], &r[0] );
          STORE( &r[0], 0, chan_index );
       }
       break;
@@ -2127,6 +2135,7 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_ROUND:
+   case TGSI_OPCODE_ARR:
       FOR_EACH_ENABLED_CHANNEL( *inst, chan_index ) {
          FETCH( &r[0], 0, chan_index );
          micro_rnd( &r[0], &r[0] );
@@ -2427,10 +2436,6 @@ exec_instruction(
       assert (0);
       break;
 
-   case TGSI_OPCODE_ARR:
-      assert (0);
-      break;
-
    case TGSI_OPCODE_BRA:
       assert (0);
       break;
@@ -2486,7 +2491,12 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_SSG:
-      assert (0);
+   /* TGSI_OPCODE_SGN */
+      FOR_EACH_ENABLED_CHANNEL( *inst, chan_index ) {
+         FETCH( &r[0], 0, chan_index );
+         micro_sgn( &r[0], &r[0] );
+         STORE( &r[0], 0, chan_index );
+      }
       break;
 
    case TGSI_OPCODE_CMP:

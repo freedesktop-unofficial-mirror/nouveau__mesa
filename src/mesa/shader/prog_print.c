@@ -215,7 +215,7 @@ reg_string(enum register_file f, GLint index, gl_prog_print_mode mode,
    switch (mode) {
    case PROG_PRINT_DEBUG:
       if (relAddr)
-         sprintf(str, "%s[ADDR%s%d]", file_string(f, mode), (index > 0) ? "+" : "", index);
+         sprintf(str, "%s[ADDR+%d]", file_string(f, mode), index);
       else
          sprintf(str, "%s[%d]", file_string(f, mode), index);
       break;
@@ -371,8 +371,8 @@ _mesa_print_swizzle(GLuint swizzle)
 }
 
 
-static const char *
-writemask_string(GLuint writeMask)
+const char *
+_mesa_writemask_string(GLuint writeMask)
 {
    static char s[10];
    GLuint i = 0;
@@ -420,7 +420,7 @@ print_dst_reg(const struct prog_dst_register *dstReg, gl_prog_print_mode mode,
    _mesa_printf("%s%s",
                 reg_string((enum register_file) dstReg->File,
                            dstReg->Index, mode, dstReg->RelAddr, prog),
-                writemask_string(dstReg->WriteMask));
+                _mesa_writemask_string(dstReg->WriteMask));
 
    if (dstReg->CondMask != COND_TR) {
       _mesa_printf(" (%s.%s)",
@@ -432,7 +432,7 @@ print_dst_reg(const struct prog_dst_register *dstReg, gl_prog_print_mode mode,
    _mesa_printf("%s[%d]%s",
                 file_string((enum register_file) dstReg->File, mode),
                 dstReg->Index,
-                writemask_string(dstReg->WriteMask));
+                _mesa_writemask_string(dstReg->WriteMask));
 #endif
 }
 
@@ -814,9 +814,18 @@ _mesa_print_parameter_list(const struct gl_program_parameter_list *list)
    for (i = 0; i < list->NumParameters; i++){
       struct gl_program_parameter *param = list->Parameters + i;
       const GLfloat *v = list->ParameterValues[i];
-      _mesa_printf("param[%d] sz=%d %s %s = {%.3g, %.3g, %.3g, %.3g};\n",
+      _mesa_printf("param[%d] sz=%d %s %s = {%.3g, %.3g, %.3g, %.3g}",
                    i, param->Size,
                    file_string(list->Parameters[i].Type, mode),
                    param->Name, v[0], v[1], v[2], v[3]);
+      if (param->Flags & PROG_PARAM_BIT_CENTROID)
+         _mesa_printf(" Centroid");
+      if (param->Flags & PROG_PARAM_BIT_INVARIANT)
+         _mesa_printf(" Invariant");
+      if (param->Flags & PROG_PARAM_BIT_FLAT)
+         _mesa_printf(" Flat");
+      if (param->Flags & PROG_PARAM_BIT_LINEAR)
+         _mesa_printf(" Linear");
+      _mesa_printf("\n");
    }
 }

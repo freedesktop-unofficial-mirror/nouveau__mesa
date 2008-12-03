@@ -76,50 +76,34 @@ link_error(struct gl_shader_program *shProg, const char *msg)
 
 
 /**
+ * Check if the given bit is either set or clear in both bitfields.
+ */
+static GLboolean
+bits_agree(GLbitfield flags1, GLbitfield flags2, GLbitfield bit)
+{
+   return (flags1 & bit) == (flags2 & bit);
+}
+
+
+/**
  * Linking varying vars involves rearranging varying vars so that the
  * vertex program's output varyings matches the order of the fragment
  * program's input varyings.
+ * We'll then rewrite instructions to replace PROGRAM_VARYING with either
+ * PROGRAM_INPUT or PROGRAM_OUTPUT depending on whether it's a vertex or
+ * fragment shader.
+ * This is also where we set program Input/OutputFlags to indicate
+ * which inputs are centroid-sampled, invariant, etc.
  */
 static GLboolean
 link_varying_vars(struct gl_shader_program *shProg, struct gl_program *prog)
 {
    GLuint *map, i, firstVarying, newFile;
+   GLbitfield *inOutFlags;
 
    map = (GLuint *) malloc(prog->Varying->NumParameters * sizeof(GLuint));
    if (!map)
       return GL_FALSE;
-
-   for (i = 0; i < prog->Varying->NumParameters; i++) {
-      /* see if this varying is in the linked varying list */
-      const struct gl_program_parameter *var = prog->Varying->Parameters + i;
-      GLint j = _mesa_lookup_parameter_index(shProg->Varying, -1, var->Name);
-      if (j >= 0) {
-         /* already in list, check size */
-         if (var->Size != shProg->Varying->Parameters[j].Size) {
-            /* error */
-            link_error(shProg, "mismatched varying variable types");
-            return GL_FALSE;
-         }
-      }
-      else {
-         /* not already in linked list */
-         j = _mesa_add_varying(shProg->Varying, var->Name, var->Size);
-      }
-
-      /* map varying[i] to varying[j].
-       * Note: the loop here takes care of arrays or large (sz>4) vars.
-       */
-      {
-         GLint sz = var->Size;
-         while (sz > 0) {
-            /*printf("Link varying from %d to %d\n", i, j);*/
-            map[i++] = j++;
-            sz -= 4;
-         }
-         i--; /* go back one */
-      }
-   }
-
 
    /* Varying variables are treated like other vertex program outputs
     * (and like other fragment program inputs).  The position of the
@@ -129,12 +113,64 @@ link_varying_vars(struct gl_shader_program *shProg, struct gl_program *prog)
    if (prog->Target == GL_VERTEX_PROGRAM_ARB) {
       firstVarying = VERT_RESULT_VAR0;
       newFile = PROGRAM_OUTPUT;
+      inOutFlags = prog->OutputFlags;
    }
    else {
       assert(prog->Target == GL_FRAGMENT_PROGRAM_ARB);
       firstVarying = FRAG_ATTRIB_VAR0;
       newFile = PROGRAM_INPUT;
+      inOutFlags = prog->InputFlags;
    }
+
+   for (i = 0; i < prog->Varying->NumParameters; i++) {
+      /* see if this varying is in the linked varying list */
+      const struct gl_program_parameter *var = prog->Varying->Parameters + i;
+      GLint j = _mesa_lookup_parameter_index(shProg->Varying, -1, var->Name);
+      if (j >= 0) {
+         /* varying is already in list, do some error checking */
+         const struct gl_program_parameter *v =
+            &shProg->Varying->Parameters[j];
+         if (var->Size != v->Size) {
+            link_error(shProg, "mismatched varying variable types");
+            return GL_FALSE;
+         }
+         if (!bits_agree(var->Flags, v->Flags, PROG_PARAM_BIT_CENTROID)) {
+            char msg[100];
+            snprintf(msg, sizeof(msg),
+                     "centroid modifier mismatch for '%s'", var->Name);
+            link_error(shProg, msg);
+            return GL_FALSE;
+         }
+         if (!bits_agree(var->Flags, v->Flags, PROG_PARAM_BIT_INVARIANT)) {
+            char msg[100];
+            snprintf(msg, sizeof(msg),
+                     "invariant modifier mismatch for '%s'", var->Name);
+            link_error(shProg, msg);
+            return GL_FALSE;
+         }
+      }
+      else {
+         /* not already in linked list */
+         j = _mesa_add_varying(shProg->Varying, var->Name, var->Size,
+                               var->Flags);
+      }
+
+      /* Map varying[i] to varying[j].
+       * Plus, set prog->Input/OutputFlags[] as described above.
+       * Note: the loop here takes care of arrays or large (sz>4) vars.
+       */
+      {
+         GLint sz = var->Size;
+         while (sz > 0) {
+            inOutFlags[firstVarying + j] = var->Flags;
+            /*printf("Link varying from %d to %d\n", i, j);*/
+            map[i++] = j++;
+            sz -= 4;
+         }
+         i--; /* go back one */
+      }
+   }
+
 
    /* OK, now scan the program/shader instructions looking for varying vars,
     * replacing the old index with the new index.
@@ -602,6 +638,11 @@ _slang_link(GLcontext *ctx,
          _mesa_print_program(&shProg->VertexProgram->Base);
          _mesa_print_program_parameters(ctx, &shProg->VertexProgram->Base);
       }
+   }
+
+   if (MESA_VERBOSE & VERBOSE_GLSL_DUMP) {
+      printf("Varying vars:\n");
+      _mesa_print_parameter_list(shProg->Varying);
    }
 
    shProg->LinkStatus = (shProg->VertexProgram || shProg->FragmentProgram);

@@ -116,6 +116,20 @@ _slang_ir_info(slang_ir_opcode opcode)
 }
 
 
+void
+_slang_init_ir_storage(slang_ir_storage *st,
+                       enum register_file file, GLint index, GLint size,
+                       GLuint swizzle)
+{
+   st->File = file;
+   st->Index = index;
+   st->Size = size;
+   st->Swizzle = swizzle;
+   st->Parent = NULL;
+   st->IsIndirect = GL_FALSE;
+}
+
+
 /**
  * Return a new slang_ir_storage object.
  */
@@ -130,6 +144,7 @@ _slang_new_ir_storage(enum register_file file, GLint index, GLint size)
       st->Size = size;
       st->Swizzle = SWIZZLE_NOOP;
       st->Parent = NULL;
+      st->IsIndirect = GL_FALSE;
    }
    return st;
 }
@@ -150,6 +165,7 @@ _slang_new_ir_storage_swz(enum register_file file, GLint index, GLint size,
       st->Size = size;
       st->Swizzle = swizzle;
       st->Parent = NULL;
+      st->IsIndirect = GL_FALSE;
    }
    return st;
 }
@@ -170,8 +186,42 @@ _slang_new_ir_storage_relative(GLint index, GLint size,
       st->Size = size;
       st->Swizzle = SWIZZLE_NOOP;
       st->Parent = parent;
+      st->IsIndirect = GL_FALSE;
    }
    return st;
+}
+
+
+slang_ir_storage *
+_slang_new_ir_storage_indirect(enum register_file file,
+                               GLint index,
+                               GLint size,
+                               enum register_file indirectFile,
+                               GLint indirectIndex,
+                               GLuint indirectSwizzle)
+{
+   slang_ir_storage *st;
+   st = (slang_ir_storage *) _slang_alloc(sizeof(slang_ir_storage));
+   if (st) {
+      st->File = file;
+      st->Index = index;
+      st->Size = size;
+      st->Swizzle = SWIZZLE_NOOP;
+      st->IsIndirect = GL_TRUE;
+      st->IndirectFile = indirectFile;
+      st->IndirectIndex = indirectIndex;
+      st->IndirectSwizzle = indirectSwizzle;
+   }
+   return st;
+}
+
+
+/* XXX temporary function */
+void
+_slang_copy_ir_storage(slang_ir_storage *dst, const slang_ir_storage *src)
+{
+   *dst = *src;
+   dst->Parent = NULL;
 }
 
 
@@ -240,22 +290,6 @@ _slang_free_ir_tree(slang_ir_node *n)
    _slang_refcount_storage(n);
 #endif
    _slang_free_ir(n);
-}
-
-
-
-static const char *
-writemask_string(GLuint writemask)
-{
-   static char s[6];
-   GLuint i, j = 0;
-   s[j++] = '.';
-   for (i = 0; i < 4; i++) {
-      if (writemask & (1 << i))
-         s[j++] = "xyzw"[i];
-   }
-   s[j] = 0;
-   return s;
 }
 
 
@@ -332,7 +366,7 @@ _slang_print_ir_tree(const slang_ir_node *n, int indent)
       _slang_print_ir_tree(n->Children[0], indent + 3);
       break;
    case IR_COPY:
-      printf("COPY (writemask = %s)\n", writemask_string(n->Writemask));
+      printf("COPY\n");
       _slang_print_ir_tree(n->Children[0], indent+3);
       _slang_print_ir_tree(n->Children[1], indent+3);
       break;

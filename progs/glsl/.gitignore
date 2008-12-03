@@ -4,6 +4,8 @@ bump
 convolutions
 deriv
 extfuncs.h
+fragcoord
+identity
 mandelbrot
 multitex
 noise
@@ -13,6 +15,7 @@ readtex.c
 readtex.h
 shaderutil.c
 shaderutil.h
+skinning
 texdemo1
 toyball
 trirast

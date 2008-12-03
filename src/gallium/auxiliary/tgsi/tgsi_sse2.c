@@ -1001,6 +1001,29 @@ emit_rcp (
       make_xmm( xmm_src ) );
 }
 
+static void PIPE_CDECL
+rnd4f(
+   float *store )
+{
+   store[0] = floorf( store[0] + 0.5f );
+   store[1] = floorf( store[1] + 0.5f );
+   store[2] = floorf( store[2] + 0.5f );
+   store[3] = floorf( store[3] + 0.5f );
+}
+
+static void
+emit_rnd(
+   struct x86_function *func,
+   unsigned xmm_save, 
+   unsigned xmm_dst )
+{
+   emit_func_call_dst(
+      func,
+      xmm_save,
+      xmm_dst,
+      rnd4f );
+}
+
 static void
 emit_rsqrt(
    struct x86_function *func,
@@ -1058,6 +1081,29 @@ emit_setsign(
       get_temp(
          TGSI_EXEC_TEMP_80000000_I,
          TGSI_EXEC_TEMP_80000000_C ) );
+}
+
+static void PIPE_CDECL
+sgn4f(
+   float *store )
+{
+   store[0] = store[0] < 0.0f ? -1.0f : store[0] > 0.0f ? 1.0f : 0.0f;
+   store[1] = store[1] < 0.0f ? -1.0f : store[1] > 0.0f ? 1.0f : 0.0f;
+   store[2] = store[2] < 0.0f ? -1.0f : store[2] > 0.0f ? 1.0f : 0.0f;
+   store[3] = store[3] < 0.0f ? -1.0f : store[3] > 0.0f ? 1.0f : 0.0f;
+}
+
+static void
+emit_sgn(
+   struct x86_function *func,
+   unsigned xmm_save, 
+   unsigned xmm_dst )
+{
+   emit_func_call_dst(
+      func,
+      xmm_save,
+      xmm_dst,
+      sgn4f );
 }
 
 static void PIPE_CDECL
@@ -1811,7 +1857,11 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_ROUND:
-      return 0;
+      FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
+         FETCH( func, *inst, 0, 0, chan_index );
+         emit_rnd( func, 0, 0 );
+         STORE( func, *inst, 0, 0, chan_index );
+      }
       break;
 
    case TGSI_OPCODE_EXPBASE2:
@@ -2051,7 +2101,12 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_ARR:
-      return 0;
+      FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
+         FETCH( func, *inst, 0, 0, chan_index );
+         emit_rnd( func, 0, 0 );
+         emit_f2it( func, 0 );
+         STORE( func, *inst, 0, 0, chan_index );
+      }
       break;
 
    case TGSI_OPCODE_BRA:
@@ -2070,7 +2125,12 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_SSG:
-      return 0;
+   /* TGSI_OPCODE_SGN */
+      FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
+         FETCH( func, *inst, 0, 0, chan_index );
+         emit_sgn( func, 0, 0 );
+         STORE( func, *inst, 0, 0, chan_index );
+      }
       break;
 
    case TGSI_OPCODE_CMP:
