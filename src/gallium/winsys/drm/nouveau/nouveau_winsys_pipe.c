@@ -68,7 +68,8 @@ nouveau_surface_handle_ref(struct nouveau_context *nv, uint32_t handle,
 	ps->winsys = nv->winsys;
 
 	memset(&tmpl, 0, sizeof(tmpl));
-	tmpl.tex_usage = PIPE_TEXTURE_USAGE_DISPLAY_TARGET;
+	tmpl.tex_usage = PIPE_TEXTURE_USAGE_DISPLAY_TARGET |
+			 NOUVEAU_TEXTURE_USAGE_LINEAR;
 	tmpl.target = PIPE_TEXTURE_2D;
 	tmpl.width[0] = w;
 	tmpl.height[0] = h;
